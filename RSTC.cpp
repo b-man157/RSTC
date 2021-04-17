@@ -72,17 +72,11 @@ bool extreme(Graph &G) {
     auto y_rit1 = G.P_y_sorted.rbegin(), y_rit2 = G.P_y_sorted.rbegin(); ++y_rit2;
 
     grid_point p, adj_p;
-    if (x_it1->first != x_it2->first) {
-        p = *x_it1;
-        G.P_x_sorted.erase(x_it1);
-        G.P_y_sorted.erase(p);
-        adj_p = {p.first + 1, p.second};
-    }
-    else if (x_rit1->first != x_rit2->first) {
-        p = *x_rit1;
-        G.P_x_sorted.erase(x_rit2.base());
-        G.P_y_sorted.erase(p);
-        adj_p = {p.first - 1, p.second};
+    if (y_it1->second != y_it2->second) {
+        p = *y_it1;
+        G.P_x_sorted.erase(p);
+        G.P_y_sorted.erase(y_it1);
+        adj_p = {p.first, p.second + 1};
     }
     else if (y_rit1->second != y_rit2->second) {
         p = *y_rit1;
@@ -90,11 +84,17 @@ bool extreme(Graph &G) {
         G.P_y_sorted.erase(y_rit2.base());
         adj_p = {p.first, p.second - 1};
     }
-    else if (y_it1->second != y_it2->second) {
-        p = *y_it1;
-        G.P_x_sorted.erase(p);
-        G.P_y_sorted.erase(y_it1);
-        adj_p = {p.first, p.second + 1};
+    else if (x_rit1->first != x_rit2->first) {
+        p = *x_rit1;
+        G.P_x_sorted.erase(x_rit2.base());
+        G.P_y_sorted.erase(p);
+        adj_p = {p.first - 1, p.second};
+    }
+    else if (x_it1->first != x_it2->first) {
+        p = *x_it1;
+        G.P_x_sorted.erase(x_it1);
+        G.P_y_sorted.erase(p);
+        adj_p = {p.first + 1, p.second};
     }
     else return true;
 
@@ -320,9 +320,77 @@ Graph Const_optRST(Graph G) {
     );
 }
 
+void retrieve_permutation(grid_point &p, const std::vector<int> &value) {
+    p.first = value[p.second - 1];
+}
+
+Graph RSTC(std::vector<grid_point> terminals, int district_size) {
+    auto C = TerMapPermut(terminals);
+    int max_size = std::min(district_size, 7);
+
+    int n = C.size(), d_solved = 0;
+    int size = std::min(n, max_size);
+
+    auto itl = C.begin();
+    auto itr = std::next(itl, size);
+    auto last = std::next(C.end(), -1);
+
+    Graph G_combined;
+
+    std::vector<int> index(n);
+    while (itl != last) {
+        std::fill(index.begin(), index.end(), -1);
+        auto it = itl;
+        for (int i = 0; i < size; ++i, ++it)
+            index[*it - 1] = i;
+
+        std::vector<int> district(size), value(size);
+        for (int i = 0, count = 1; i < n; ++i)
+            if (index[i] >= 0) {
+                district[index[i]] = count++;
+                value[index[i]] = i + 1;
+            }
+
+        auto G_d = Const_optRST(Permut(district));
+        /* std::for_each(G_d.P_x_sorted.begin(), G_d.P_x_sorted.end(),
+            [value](grid_point &p) {
+                retrieve_permutation(p, value);
+            }
+        );
+        std::for_each(G_d.P_y_sorted.begin(), G_d.P_y_sorted.end(),
+            [value](grid_point &p) {
+                retrieve_permutation(p, value);
+            }
+        ); */
+        std::for_each(G_d.E.begin(), G_d.E.end(),
+            [value](edge &e) {
+                retrieve_permutation(e.first, value);
+                retrieve_permutation(e.second, value);
+            }
+        );
+
+        G_combined.P_x_sorted.insert(G_d.P_x_sorted.begin(), G_d.P_x_sorted.end());
+        G_combined.P_y_sorted.insert(G_d.P_y_sorted.begin(), G_d.P_y_sorted.end());
+        G_combined.E.merge(G_d.E,
+            [](const auto &lhs, const auto &rhs) {
+                return lhs.first == rhs.first  && lhs.second == rhs.second
+                    || lhs.first == rhs.second && lhs.second == rhs.first;
+            }
+        );
+        G_combined.L += G_d.L;
+
+        ++d_solved;
+        size = std::min(n - (d_solved * max_size), max_size);
+        itl = std::next(itr, -1);
+        std::advance(itl, size);
+    }
+    G_combined.grown = true;
+
+    return G_combined;
+}
+
 int main() {
-    // std::vector<grid_point> terminals{{4, 3}, {6, 6}, {0, 47}, {2, 8}, {1, 6}, {3, 4}};
-    std::vector<grid_point> terminals{{1, 4}, {2, 2}, {3, 3}, {4, 1}};
+    std::vector<grid_point> terminals{{4, 3}, {6, 6}, {0, 47}, {2, 8}, {1, 6}, {3, 4}};
     auto C = TerMapPermut(terminals);
 
     for (auto i : C) {

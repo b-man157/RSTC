@@ -1,7 +1,7 @@
 all: a.out
 
-a.out: TI.cpp
-	g++ -g TI.cpp
+a.out: RSTC.cpp
+	g++ -g RSTC.cpp -o RSTC
 
 clean:
-	rm a.out
+	rm RSTC
