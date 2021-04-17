@@ -320,10 +320,6 @@ Graph Const_optRST(Graph G) {
     );
 }
 
-void retrieve_permutation(grid_point &p, const std::vector<int> &value) {
-    p.first = value[p.second - 1];
-}
-
 Graph RSTC(std::vector<grid_point> terminals, int district_size) {
     auto C = TerMapPermut(terminals);
     int max_size = std::min(district_size, 7);
@@ -344,45 +340,44 @@ Graph RSTC(std::vector<grid_point> terminals, int district_size) {
         for (int i = 0; i < size; ++i, ++it)
             index[*it - 1] = i;
 
-        std::vector<int> district(size), value(size);
+        std::vector<int> district(size);
         for (int i = 0, count = 1; i < n; ++i)
             if (index[i] >= 0) {
                 district[index[i]] = count++;
-                value[index[i]] = i + 1;
             }
-
         auto G_d = Const_optRST(Permut(district));
-        /* std::for_each(G_d.P_x_sorted.begin(), G_d.P_x_sorted.end(),
-            [value](grid_point &p) {
-                retrieve_permutation(p, value);
-            }
-        );
-        std::for_each(G_d.P_y_sorted.begin(), G_d.P_y_sorted.end(),
-            [value](grid_point &p) {
-                retrieve_permutation(p, value);
-            }
-        ); */
-        std::for_each(G_d.E.begin(), G_d.E.end(),
-            [value](edge &e) {
-                retrieve_permutation(e.first, value);
-                retrieve_permutation(e.second, value);
-            }
-        );
 
-        G_combined.P_x_sorted.insert(G_d.P_x_sorted.begin(), G_d.P_x_sorted.end());
-        G_combined.P_y_sorted.insert(G_d.P_y_sorted.begin(), G_d.P_y_sorted.end());
-        G_combined.E.merge(G_d.E,
+        /* for (auto p : G_d.P_x_sorted) {
+            auto p_copy = p;
+            retrieve_permutation(p_copy, );
+            G_combined.P_x_sorted.insert(p_copy);
+        }
+        for (auto p : G_d.P_y_sorted) {
+            auto p_copy = p;
+            retrieve_permutation(p_copy, );
+            G_combined.P_y_sorted.insert(p_copy);
+        }
+
+        auto E_d = G_d.E;
+        std::for_each(E_d.begin(), E_d.end(),
+            [//](edge &e) {
+                retrieve_permutation(e.first, );
+                retrieve_permutation(e.second, );
+            }
+        );
+        G_combined.E.merge(E_d,
             [](const auto &lhs, const auto &rhs) {
                 return lhs.first == rhs.first  && lhs.second == rhs.second
                     || lhs.first == rhs.second && lhs.second == rhs.first;
             }
-        );
+        ); */
+
         G_combined.L += G_d.L;
 
         ++d_solved;
         size = std::min(n - (d_solved * max_size), max_size);
         itl = std::next(itr, -1);
-        std::advance(itl, size);
+        std::advance(itr, size);
     }
     G_combined.grown = true;
 
@@ -391,35 +386,19 @@ Graph RSTC(std::vector<grid_point> terminals, int district_size) {
 
 int main() {
     std::vector<grid_point> terminals{{4, 3}, {6, 6}, {0, 47}, {2, 8}, {1, 6}, {3, 4}};
-    auto C = TerMapPermut(terminals);
+    int district_size = 7;
 
-    for (auto i : C) {
-        std::cout << i << " ";
-    }
-    std::cout << std::endl;
-
-    Graph G = Permut(C);
+    Graph G = RSTC(terminals, district_size);
 
     for (auto it = G.P_x_sorted.begin(); it != G.P_x_sorted.end(); ++it)
         std::cout << "(" << it->first << ", " << it->second << ") ; ";
     std::cout << "\b\b \n";
 
-    for (auto it = G.P_y_sorted.begin(); it != G.P_y_sorted.end(); ++it)
-        std::cout << "(" << it->first << ", " << it->second << ") ; ";
-    std::cout << "\b\b \n";
-
-    Graph G_ret = Const_optRST(G);
-
-    for (auto it = G_ret.P_x_sorted.begin(); it != G_ret.P_x_sorted.end(); ++it)
-        std::cout << "(" << it->first << ", " << it->second << ") ; ";
-    std::cout << "\b\b \n";
-
-    for (auto it = G_ret.E.begin(); it != G_ret.E.end(); ++it)
+    for (auto it = G.E.begin(); it != G.E.end(); ++it)
         std::cout << "(" << it->first.first  << ", " << it->first.second  << ") -> "
                   << "(" << it->second.first << ", " << it->second.second << ")\n";
 
-
-    std::cout << G_ret.L << std::endl;
+    std::cout << G.L << std::endl;
 
     return 0;
 }
