@@ -1,8 +1,11 @@
 #include <algorithm>
 #include <iostream>
+#include <iterator>
 #include <list>
 #include <map>
+#include <numeric>
 #include <set>
+#include <stack>
 #include <utility>
 #include <vector>
 
@@ -26,6 +29,12 @@ struct Graph {
 };
 
 std::vector<int> TerMapPermut(std::vector<grid_point> &terminals) {
+    sort(terminals.begin(), terminals.end());
+
+    std::map<grid_point, int> order;
+    for (int i = 0; i < terminals.size(); ++i)
+        order[terminals[i]] = i + 1;
+
     sort(terminals.begin(), terminals.end(),
         [](const auto &lhs, const auto &rhs) {
             if (lhs.second != rhs.second)
@@ -33,12 +42,6 @@ std::vector<int> TerMapPermut(std::vector<grid_point> &terminals) {
             return lhs.first < rhs.first;
         }
     );
-
-    std::map<grid_point, int> order;
-    for (int i = 0; i < terminals.size(); ++i)
-        order[terminals[i]] = i + 1;
-
-    sort(terminals.begin(), terminals.end());
 
     std::vector<int> C(terminals.size());
     for (int i = 0; i < C.size(); ++i)
@@ -50,19 +53,66 @@ std::vector<int> TerMapPermut(std::vector<grid_point> &terminals) {
 Graph Permut(const std::vector<int> &C) {
     Graph P;
     for (int i = 0; i < C.size(); ++i) {
-        P.P_x_sorted.insert(std::make_pair(C[i], i+1));
-        P.P_y_sorted.insert(std::make_pair(C[i], i+1));
+        P.P_x_sorted.insert(std::make_pair(C[i], i + 1));
+        P.P_y_sorted.insert(std::make_pair(C[i], i + 1));
     }
     return P;
 }
 
-bool extreme(Graph &G) {
+class Axes {
+    private:
+        std::vector<int> x_axis;
+        std::vector<int> y_axis;
+
+    public:
+        template <class Iterable>
+        Axes(const Iterable &itl, const Iterable &itr) {
+            int size = std::distance(itl, itr);
+            x_axis.resize(size);
+            y_axis.resize(size);
+
+            std::transform(itl, itr, x_axis.begin(),
+                [](const auto &p) {
+                    return p.first;
+                }
+            );
+            std::transform(itl, itr, y_axis.begin(),
+                [](const auto &p) {
+                    return p.second;
+                }
+            );
+
+            std::sort(x_axis.begin(), x_axis.end());
+            std::sort(y_axis.begin(), y_axis.end());
+        }
+
+    grid_point converted(grid_point p) {
+        p.first = x_axis[p.first - 1];
+        p.second = y_axis[p.second - 1];
+        return p;
+    }
+};
+
+void apply_conversions(grid_point &p, std::stack<Axes> axes) {
+    while (!axes.empty()) {
+        auto ax = axes.top();
+        p = ax.converted(p);
+        axes.pop();
+    }
+}
+
+int delta(grid_point p1, grid_point p2, const std::stack<Axes> &axes) {
+    apply_conversions(p1, axes); apply_conversions(p2, axes);
+    return abs(p1.first - p2.first) + abs(p1.second - p2.second);
+}
+
+bool extreme(Graph &G, const std::stack<Axes> &axes) {
     if (G.P_x_sorted.size() == 2) {
         auto p1 = *G.P_x_sorted.begin(), p2 = *G.P_x_sorted.rbegin();
         G.E.push_back({p1, p2});
         G.P_x_sorted.erase(G.P_x_sorted.begin());
         G.P_y_sorted.erase(p1);
-        G.L += abs(p1.first - p2.first) + abs(p2.second - p1.second);
+        G.L += delta(p1, p2, axes);
         return false;
     }
 
@@ -101,9 +151,9 @@ bool extreme(Graph &G) {
     G.P_x_sorted.insert(adj_p);
     G.P_y_sorted.insert(adj_p);
     G.E.push_back({p, adj_p});
-    ++G.L;
+    G.L += delta(p, adj_p, axes);
 
-    return extreme(G);
+    return extreme(G, axes);
 }
 
 bool equal_edge_lists(const std::list<edge> &lhs, const std::list<edge> &rhs) {
@@ -117,7 +167,7 @@ bool equal_edge_lists(const std::list<edge> &lhs, const std::list<edge> &rhs) {
     return true;
 }
 
-void fork(const Graph &G, std::list<Graph> &TreeList) {
+void fork(const Graph &G, std::list<Graph> &TreeList, const std::stack<Axes> &axes) {
     Graph G1, G2, G3;
     G1 = G2 = G3 = G;
 
@@ -137,7 +187,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G1.P_y_sorted.insert(eps_i_plus1_j); G1.P_y_sorted.insert(eps_i_plus1_k);
         G1.E.push_back({eps_i_j, eps_i_plus1_j});
         G1.E.push_back({eps_i_k, eps_i_plus1_k});
-        G1.L += 2;
+        G1.L += delta(eps_i_j, eps_i_plus1_j, axes)
+              + delta(eps_i_k, eps_i_plus1_k, axes);
         TreeList.push_back(G1);
 
         G2.P_x_sorted.erase(eps_i_j); G2.P_x_sorted.erase(eps_i_k);
@@ -146,7 +197,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G2.P_y_sorted.insert(eps_i_plus1_j);
         G2.E.push_back(std::make_pair(eps_i_j, eps_i_plus1_j));
         G2.E.push_back(std::make_pair(eps_i_j, eps_i_k));
-        G2.L += 1 + abs(eps_i_j.second - eps_i_k.second);
+        G2.L += delta(eps_i_j, eps_i_plus1_j, axes)
+              + delta(eps_i_j, eps_i_k, axes);
         TreeList.push_back(G2);
 
         G3.P_x_sorted.erase(eps_i_j); G3.P_x_sorted.erase(eps_i_k);
@@ -155,7 +207,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G3.P_y_sorted.insert(eps_i_plus1_k);
         G3.E.push_back(std::make_pair(eps_i_k, eps_i_plus1_k));
         G3.E.push_back(std::make_pair(eps_i_j, eps_i_k));
-        G3.L += 1 + abs(eps_i_j.second - eps_i_k.second);
+        G3.L += delta(eps_i_k, eps_i_plus1_k, axes)
+              + delta(eps_i_j, eps_i_k, axes);
         TreeList.push_back(G3);
 
         for (auto it = TreeList.begin(); it != TreeList.end(); ++it)
@@ -178,7 +231,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G1.P_y_sorted.insert(eps_i_minus1_j); G1.P_y_sorted.insert(eps_i_minus1_k);
         G1.E.push_back({eps_i_j, eps_i_minus1_j});
         G1.E.push_back({eps_i_k, eps_i_minus1_k});
-        G1.L += 2;
+        G1.L += delta(eps_i_j, eps_i_minus1_j, axes)
+              + delta(eps_i_k, eps_i_minus1_k, axes);
         TreeList.push_back(G1);
 
         G2.P_x_sorted.erase(eps_i_j); G2.P_x_sorted.erase(eps_i_k);
@@ -187,7 +241,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G2.P_y_sorted.insert(eps_i_minus1_j);
         G2.E.push_back(std::make_pair(eps_i_j, eps_i_minus1_j));
         G2.E.push_back(std::make_pair(eps_i_j, eps_i_k));
-        G2.L += 1 + abs(eps_i_j.second - eps_i_k.second);
+        G2.L += delta(eps_i_j, eps_i_minus1_j, axes)
+              + delta(eps_i_j, eps_i_k, axes);
         TreeList.push_back(G2);
 
         G3.P_x_sorted.erase(eps_i_j); G3.P_x_sorted.erase(eps_i_k);
@@ -196,7 +251,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G3.P_y_sorted.insert(eps_i_minus1_k);
         G3.E.push_back(std::make_pair(eps_i_k, eps_i_minus1_k));
         G3.E.push_back(std::make_pair(eps_i_j, eps_i_k));
-        G3.L += 1 + abs(eps_i_j.second - eps_i_k.second);
+        G3.L += delta(eps_i_k, eps_i_minus1_k, axes)
+              + delta(eps_i_j, eps_i_k, axes);
         TreeList.push_back(G3);
 
         for (auto it = TreeList.begin(); it != TreeList.end(); ++it)
@@ -219,7 +275,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G1.P_y_sorted.insert(eps_i_k_plus1); G1.P_y_sorted.insert(eps_j_k_plus1);
         G1.E.push_back({eps_i_k, eps_i_k_plus1});
         G1.E.push_back({eps_j_k, eps_j_k_plus1});
-        G1.L += 2;
+        G1.L += delta(eps_i_k, eps_i_k_plus1, axes)
+              + delta(eps_j_k, eps_j_k_plus1, axes);
         TreeList.push_back(G1);
 
         G2.P_x_sorted.erase(eps_i_k); G2.P_x_sorted.erase(eps_j_k);
@@ -228,7 +285,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G2.P_y_sorted.insert(eps_i_k_plus1);
         G2.E.push_back(std::make_pair(eps_i_k, eps_i_k_plus1));
         G2.E.push_back(std::make_pair(eps_i_k, eps_j_k));
-        G2.L += 1 + abs(eps_i_k.first - eps_j_k.first);
+        G2.L += delta(eps_i_k, eps_i_k_plus1, axes)
+              + delta(eps_i_k, eps_j_k, axes);
         TreeList.push_back(G2);
 
         G3.P_x_sorted.erase(eps_i_k); G3.P_x_sorted.erase(eps_j_k);
@@ -237,7 +295,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G3.P_y_sorted.insert(eps_j_k_plus1);
         G3.E.push_back(std::make_pair(eps_j_k, eps_j_k_plus1));
         G3.E.push_back(std::make_pair(eps_i_k, eps_j_k));
-        G3.L += 1 + abs(eps_i_k.first - eps_j_k.first);
+        G3.L += delta(eps_j_k, eps_j_k_plus1, axes)
+              + delta(eps_i_k, eps_j_k, axes);
         TreeList.push_back(G3);
 
         for (auto it = TreeList.begin(); it != TreeList.end(); ++it)
@@ -249,7 +308,7 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         return;
     }
 
-    if (y_rit1->first == y_rit2->first) {
+    if (y_rit1->second == y_rit2->second) {
         auto eps_i_k = *y_rit2, eps_j_k = *y_rit1;
         auto eps_i_k_minus1 = std::make_pair(y_rit2->first, y_rit2->second - 1);
         auto eps_j_k_minus1 = std::make_pair(y_rit1->first, y_rit1->second - 1);
@@ -260,7 +319,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G1.P_y_sorted.insert(eps_i_k_minus1); G1.P_y_sorted.insert(eps_j_k_minus1);
         G1.E.push_back({eps_i_k, eps_i_k_minus1});
         G1.E.push_back({eps_j_k, eps_j_k_minus1});
-        G1.L += 2;
+        G1.L += delta(eps_i_k, eps_i_k_minus1, axes)
+              + delta(eps_j_k, eps_j_k_minus1, axes);
         TreeList.push_back(G1);
 
         G2.P_x_sorted.erase(eps_i_k); G2.P_x_sorted.erase(eps_j_k);
@@ -269,7 +329,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G2.P_y_sorted.insert(eps_i_k_minus1);
         G2.E.push_back(std::make_pair(eps_i_k, eps_i_k_minus1));
         G2.E.push_back(std::make_pair(eps_i_k, eps_j_k));
-        G2.L += 1 + abs(eps_i_k.first - eps_j_k.first);
+        G2.L += delta(eps_i_k, eps_i_k_minus1, axes)
+              + delta(eps_i_k, eps_j_k, axes);
         TreeList.push_back(G2);
 
         G3.P_x_sorted.erase(eps_i_k); G3.P_x_sorted.erase(eps_j_k);
@@ -278,7 +339,8 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
         G3.P_y_sorted.insert(eps_j_k_minus1);
         G3.E.push_back(std::make_pair(eps_j_k, eps_j_k_minus1));
         G3.E.push_back(std::make_pair(eps_i_k, eps_j_k));
-        G3.L += 1 + abs(eps_i_k.first - eps_j_k.first);
+        G3.L += delta(eps_j_k, eps_j_k_minus1, axes)
+              + delta(eps_i_k, eps_j_k, axes);
         TreeList.push_back(G3);
 
         for (auto it = TreeList.begin(); it != TreeList.end(); ++it)
@@ -294,15 +356,15 @@ void fork(const Graph &G, std::list<Graph> &TreeList) {
     return;
 }
 
-Graph Const_optRST(Graph G) {
+Graph Const_optRST(Graph G, const std::stack<Axes> &axes) {
     std::list<Graph> TreeList;
     TreeList.emplace_back(G);
 
     auto it = TreeList.begin();
     while (it != TreeList.end()) {
         if (it->grown == false)
-            if (extreme(*it)) {
-                fork(*it, TreeList);
+            if (extreme(*it, axes)) {
+                fork(*it, TreeList, axes);
                 it = TreeList.begin();
             }
             else {
@@ -323,65 +385,76 @@ Graph Const_optRST(Graph G) {
 Graph RSTC(std::vector<grid_point> terminals, int district_size) {
     auto C = TerMapPermut(terminals);
     int max_size = std::min(district_size, 7);
+    std::stack<Axes> axes;
+    axes.push(Axes(terminals.begin(), terminals.end()));
 
-    int n = C.size(), d_solved = 0;
+    Graph G_P = Permut(C);
+    auto P = G_P.P_y_sorted;
+
+    int n = P.size(), d_solved = 0;
     int size = std::min(n, max_size);
 
-    auto itl = C.begin();
+    auto itl = P.begin();
     auto itr = std::next(itl, size);
-    auto last = std::next(C.end(), -1);
-
-    Graph G_combined;
+    auto last = std::next(P.end(), -1);
 
     std::vector<int> index(n);
     while (itl != last) {
         std::fill(index.begin(), index.end(), -1);
         auto it = itl;
         for (int i = 0; i < size; ++i, ++it)
-            index[*it - 1] = i;
+            index[it->first - 1] = i;
 
         std::vector<int> district(size);
         for (int i = 0, count = 1; i < n; ++i)
-            if (index[i] >= 0) {
+            if (index[i] >= 0)
                 district[index[i]] = count++;
-            }
-        auto G_d = Const_optRST(Permut(district));
 
-        /* for (auto p : G_d.P_x_sorted) {
+        axes.push(Axes(itl, itr));
+        auto G_d = Const_optRST(Permut(district), axes);
+
+        G_P.P_x_sorted.clear();
+        G_P.P_y_sorted.clear();
+        for (auto p : G_d.P_x_sorted) {
             auto p_copy = p;
-            retrieve_permutation(p_copy, );
-            G_combined.P_x_sorted.insert(p_copy);
+            apply_conversions(p_copy, axes);
+            G_P.P_x_sorted.insert(p_copy);
         }
         for (auto p : G_d.P_y_sorted) {
             auto p_copy = p;
-            retrieve_permutation(p_copy, );
-            G_combined.P_y_sorted.insert(p_copy);
+            apply_conversions(p_copy, axes);
+            G_P.P_y_sorted.insert(p_copy);
         }
 
         auto E_d = G_d.E;
-        std::for_each(E_d.begin(), E_d.end(),
-            [//](edge &e) {
-                retrieve_permutation(e.first, );
-                retrieve_permutation(e.second, );
+        for (auto &e : E_d) {
+            apply_conversions(e.first, axes);
+            apply_conversions(e.second, axes);
+        }
+        std::list<edge> E_filtered;
+        std::copy_if(E_d.begin(), E_d.end(), std::back_inserter(E_filtered),
+            [](const edge &e) {
+                return e.first != e.second;
             }
         );
-        G_combined.E.merge(E_d,
+        G_P.E.merge(E_filtered,
             [](const auto &lhs, const auto &rhs) {
                 return lhs.first == rhs.first  && lhs.second == rhs.second
                     || lhs.first == rhs.second && lhs.second == rhs.first;
             }
-        ); */
+        );
 
-        G_combined.L += G_d.L;
+        G_P.L += G_d.L;
 
         ++d_solved;
+        axes.pop();
         size = std::min(n - (d_solved * max_size), max_size);
         itl = std::next(itr, -1);
         std::advance(itr, size);
     }
-    G_combined.grown = true;
+    G_P.grown = true;
 
-    return G_combined;
+    return G_P;
 }
 
 int main() {
