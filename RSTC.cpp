@@ -384,12 +384,14 @@ Graph Const_optRST(Graph G, const std::stack<Axes> &axes) {
 
 Graph RSTC(std::vector<grid_point> terminals, int district_size) {
     auto C = TerMapPermut(terminals);
-    int max_size = std::min(district_size, 7);
+    int max_size = std::max(std::min(district_size, 7), 2);
     std::stack<Axes> axes;
     axes.push(Axes(terminals.begin(), terminals.end()));
 
     Graph G_P = Permut(C);
     auto P = G_P.P_y_sorted;
+    G_P.P_x_sorted.clear();
+    G_P.P_y_sorted.clear();
 
     int n = P.size(), d_solved = 0;
     int size = std::min(n, max_size);
@@ -413,8 +415,6 @@ Graph RSTC(std::vector<grid_point> terminals, int district_size) {
         axes.push(Axes(itl, itr));
         auto G_d = Const_optRST(Permut(district), axes);
 
-        G_P.P_x_sorted.clear();
-        G_P.P_y_sorted.clear();
         for (auto p : G_d.P_x_sorted) {
             auto p_copy = p;
             apply_conversions(p_copy, axes);
@@ -448,9 +448,9 @@ Graph RSTC(std::vector<grid_point> terminals, int district_size) {
 
         ++d_solved;
         axes.pop();
-        size = std::min(n - (d_solved * max_size), max_size);
+        size = std::min(n - (d_solved * (max_size - 1)), max_size);
         itl = std::next(itr, -1);
-        std::advance(itr, size);
+        itr = std::next(itl, size);
     }
     G_P.grown = true;
 
